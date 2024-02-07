@@ -8,7 +8,9 @@ import edu.ustc.shortlink.admin.common.convention.errorcode.IErrorCode;
  */
 public enum UserErrorCodeEnum implements IErrorCode {
     User_NULL("B000200","用户记录不存在"),
-    USER_EXIST("B000201","用户已存在");
+    User_NAME_EXIST("B000201","用户名已存在"),
+    USER_EXIST("B000202","用户已存在"),
+    USER_SAVE_ERROR("B000203","用户注册失败");
     private final String code;
     private final String message;
     UserErrorCodeEnum(String code,String message) {
