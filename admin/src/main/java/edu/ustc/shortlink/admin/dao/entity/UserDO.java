@@ -1,12 +1,9 @@
 package edu.ustc.shortlink.admin.dao.entity;
 
-import com.baomidou.mybatisplus.annotation.FieldFill;
-import com.baomidou.mybatisplus.annotation.TableField;
-import com.baomidou.mybatisplus.annotation.TableName;
-import lombok.Data;
 
-import java.time.LocalDateTime;
-import java.util.Date;
+import com.baomidou.mybatisplus.annotation.TableName;
+import edu.ustc.shortlink.admin.common.database.BaseDO;
+import lombok.Data;
 
 /**
  * @Author: ljx
@@ -14,7 +11,7 @@ import java.util.Date;
  */
 @Data
 @TableName("t_user")
-public class UserDO{
+public class UserDO extends BaseDO {
 
     /**
      * id
@@ -51,12 +48,4 @@ public class UserDO{
      */
     private Long deletionTime;
 
-    @TableField(fill = FieldFill.INSERT)
-    private LocalDateTime createTime;
-
-    @TableField(fill = FieldFill.INSERT_UPDATE)
-    private LocalDateTime updateTime;
-
-    @TableField(fill = FieldFill.INSERT)
-    private Integer delFlag;
 }
