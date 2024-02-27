@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.*;
  */
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/api/short-link/v1/user")
+@RequestMapping("/api/short-link/admin/v1/user")
 public class UserController {
     private final UserService userService;
     @GetMapping("/{username}")
@@ -31,7 +31,7 @@ public class UserController {
         return Results.success(userService.hasUsername(username));
     }
 
-    @PostMapping("/register")
+    @PostMapping()
     public Result<Void> register(@RequestBody UserRegisterReqDTO userRegisterReqDTO) {
         userService.register(userRegisterReqDTO);
         return Results.success();
