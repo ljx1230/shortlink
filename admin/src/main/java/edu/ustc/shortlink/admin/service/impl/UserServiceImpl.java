@@ -9,6 +9,8 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import edu.ustc.shortlink.admin.common.biz.user.UserContext;
+import edu.ustc.shortlink.admin.common.biz.user.UserInfoDTO;
 import edu.ustc.shortlink.admin.common.convention.exception.ClientException;
 import edu.ustc.shortlink.admin.common.enums.UserErrorCodeEnum;
 import edu.ustc.shortlink.admin.dao.entity.UserDO;
@@ -18,12 +20,14 @@ import edu.ustc.shortlink.admin.dto.req.UserRegisterReqDTO;
 import edu.ustc.shortlink.admin.dto.req.UserUpdateReqDTO;
 import edu.ustc.shortlink.admin.dto.resp.UserLoginRespDTO;
 import edu.ustc.shortlink.admin.dto.resp.UserRespDTO;
+import edu.ustc.shortlink.admin.service.GroupService;
 import edu.ustc.shortlink.admin.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.redisson.api.RBloomFilter;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
 import org.springframework.beans.BeanUtils;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -44,6 +48,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, UserDO> implements 
     private final RBloomFilter<String> userRegisterCachePenetrationBloomFilter;
     private final RedissonClient redissonClient;
     private final StringRedisTemplate stringRedisTemplate;
+    private final GroupService groupService;
     @Override
     public UserRespDTO getUserByUsername(String username) {
         LambdaQueryWrapper<UserDO> queryWrapper = Wrappers.lambdaQuery(UserDO.class)
@@ -71,19 +76,22 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, UserDO> implements 
         RLock lock = redissonClient.getLock(LOCK_USER_REGISTER_KEY + username);
         try{
             if(lock.tryLock()) {
-                int cnt = baseMapper.insert(BeanUtil.toBean(userRegisterReqDTO, UserDO.class));
-                if(cnt < 1) {
-                    throw new ClientException(UserErrorCodeEnum.USER_SAVE_ERROR);
+                try {
+                    int cnt = baseMapper.insert(BeanUtil.toBean(userRegisterReqDTO, UserDO.class));
+                    if(cnt < 1) {
+                        throw new ClientException(UserErrorCodeEnum.USER_SAVE_ERROR);
+                    }
+                } catch (DuplicateKeyException e) {
+                    throw new ClientException(UserErrorCodeEnum.USER_EXIST);
                 }
                 userRegisterCachePenetrationBloomFilter.add(username);
-            } else {
-                throw new ClientException(UserErrorCodeEnum.User_NAME_EXIST);
+                groupService.saveGroup(username,"默认分组");
+                return;
             }
+            throw new ClientException(UserErrorCodeEnum.User_NAME_EXIST);
         } finally {
             lock.unlock();
         }
-
-
     }
 
     @Override

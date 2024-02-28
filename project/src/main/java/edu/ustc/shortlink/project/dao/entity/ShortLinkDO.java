@@ -5,7 +5,10 @@ import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import edu.ustc.shortlink.project.common.database.BaseDO;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 import java.util.Date;
@@ -16,6 +19,9 @@ import java.util.Date;
  */
 @Data
 @TableName("t_link")
+@Builder
+@AllArgsConstructor
+@NoArgsConstructor
 public class ShortLinkDO extends BaseDO {
 
 
@@ -55,17 +61,17 @@ public class ShortLinkDO extends BaseDO {
     /**
      * 启用标识 0：未启用 1：已启用
      */
-    private int enableStatus;
+    private Integer enableStatus;
 
     /**
      * 创建类型 0：控制台 1：接口
      */
-    private int createdType;
+    private Integer createdType;
 
     /**
      * 有效期类型 0：永久有效 1：用户自定义
      */
-    private int validDateType;
+    private Integer validDateType;
 
     /**
      * 有效期

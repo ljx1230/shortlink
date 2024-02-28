@@ -10,6 +10,6 @@ import lombok.Data;
 public class ShortLinkGroupRespDTO {
     private String gid;
     private String name;
-    private String username;
     private Integer sortOrder;
+    private Integer shortLinkCount;
 }

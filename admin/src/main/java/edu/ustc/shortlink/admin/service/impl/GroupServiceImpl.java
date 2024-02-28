@@ -6,11 +6,14 @@ import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import edu.ustc.shortlink.admin.common.biz.user.UserContext;
+
 import edu.ustc.shortlink.admin.dao.entity.GroupDO;
 import edu.ustc.shortlink.admin.dao.mapper.GroupMapper;
 import edu.ustc.shortlink.admin.dto.req.ShortLinkGroupSortReqDTO;
 import edu.ustc.shortlink.admin.dto.req.ShortLinkGroupUpdateReqDTO;
 import edu.ustc.shortlink.admin.dto.resp.ShortLinkGroupRespDTO;
+import edu.ustc.shortlink.admin.remote.ShortLinkRemoteService;
+import edu.ustc.shortlink.admin.remote.dto.resp.ShortLinkGroupCntQueryRespDTO;
 import edu.ustc.shortlink.admin.service.GroupService;
 import edu.ustc.shortlink.admin.toolkit.RandomGenerator;
 import lombok.extern.slf4j.Slf4j;
@@ -25,12 +28,18 @@ import java.util.List;
 @Service
 @Slf4j
 public class GroupServiceImpl extends ServiceImpl<GroupMapper, GroupDO> implements GroupService {
+    private ShortLinkRemoteService shortLinkRemoteService = new ShortLinkRemoteService() {};
     @Override
     public void saveGroup(String groupName) {
+        this.saveGroup(UserContext.getUsername(),groupName);
+    }
+
+    @Override
+    public void saveGroup(String username, String groupName) {
         String gid = RandomGenerator.generateRandom();
         LambdaQueryWrapper<GroupDO> queryWrapper = Wrappers.lambdaQuery(GroupDO.class)
                 .eq(GroupDO::getGid, gid)
-                .eq(GroupDO::getUsername,UserContext.getUsername());
+                .eq(GroupDO::getUsername,username);
         GroupDO hasGroupFlag = baseMapper.selectOne(queryWrapper);
         while(hasGroupFlag != null) {
             gid = RandomGenerator.generateRandom();
@@ -38,7 +47,7 @@ public class GroupServiceImpl extends ServiceImpl<GroupMapper, GroupDO> implemen
         }
         GroupDO groupDO = GroupDO.builder()
                 .name(groupName)
-                .username(UserContext.getUsername())
+                .username(username)
                 .gid(gid)
                 .sortOrder(0)
                 .build();
@@ -53,7 +62,21 @@ public class GroupServiceImpl extends ServiceImpl<GroupMapper, GroupDO> implemen
                 .eq(GroupDO::getDelFlag,0)
                 .orderByDesc(GroupDO::getSortOrder, GroupDO::getUpdateTime);
         List<GroupDO> list = baseMapper.selectList(queryWrapper);
-        return BeanUtil.copyToList(list, ShortLinkGroupRespDTO.class);
+
+        List<ShortLinkGroupCntQueryRespDTO> groupCntQueryRespDTOList =
+                shortLinkRemoteService.listGroupShortLinkCount(list.stream().map(GroupDO::getGid).toList()).getData();
+
+        List<ShortLinkGroupRespDTO> groupRespDTOList = BeanUtil.copyToList(list, ShortLinkGroupRespDTO.class);
+
+        for(var item : groupRespDTOList) {
+            for(var item2 : groupCntQueryRespDTOList) {
+                if(item2.getGid().equals(item.getGid())) {
+                    item.setShortLinkCount(item2.getShortLinkCount());
+                    break;
+                }
+            }
+        }
+        return groupRespDTOList;
     }
 
     @Override

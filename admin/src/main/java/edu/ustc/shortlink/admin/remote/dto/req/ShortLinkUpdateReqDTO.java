@@ -1,10 +1,9 @@
-package edu.ustc.shortlink.project.dto.req;
+package edu.ustc.shortlink.admin.remote.dto.req;
 
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.Data;
 
-import java.time.LocalDateTime;
 import java.util.Date;
 
 /**
@@ -12,26 +11,26 @@ import java.util.Date;
  * @Date: 2024/2/27 15:14
  */
 @Data
-public class ShortLinkCreateReqDTO {
-    /**
-     * 域名
-     */
-    private String domain;
-
+public class ShortLinkUpdateReqDTO {
     /**
      * 原始链接
      */
     private String originUrl;
 
     /**
+     * 短链接
+     */
+    private String shortUrl;
+
+    /**
+     * 完整短链接
+     */
+    private String fullShortUrl;
+
+    /**
      * 分组标识
      */
     private String gid;
-
-    /**
-     * 创建类型 0：控制台 1：接口
-     */
-    private int createdType;
 
     /**
      * 有效期类型 0：永久有效 1：用户自定义
