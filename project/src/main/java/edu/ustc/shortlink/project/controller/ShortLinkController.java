@@ -49,7 +49,7 @@ public class ShortLinkController {
         return Results.success();
     }
     @GetMapping("/{short-uri}")
-    public void restoreUrl(@PathVariable("short-uri")String shortUri, HttpServletRequest request, HttpServletResponse response) throws IOException {
+    public void restoreUrl(@PathVariable("short-uri")String shortUri, HttpServletRequest request, HttpServletResponse response){
         shortLinkService.restoreUrl(shortUri,request,response);
     }
 }
