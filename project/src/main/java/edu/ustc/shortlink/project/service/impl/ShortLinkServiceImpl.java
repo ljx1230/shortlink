@@ -1,6 +1,7 @@
 package edu.ustc.shortlink.project.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
+import cn.hutool.core.date.DateUtil;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
@@ -22,11 +23,15 @@ import edu.ustc.shortlink.project.dto.resp.ShortLinkGroupCntQueryRespDTO;
 import edu.ustc.shortlink.project.dto.resp.ShortLinkPageRespDTO;
 import edu.ustc.shortlink.project.service.ShortLinkService;
 import edu.ustc.shortlink.project.toolkit.HashUtil;
+import edu.ustc.shortlink.project.toolkit.LinkUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
 import org.redisson.api.RBloomFilter;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
@@ -36,12 +41,15 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 
-import static edu.ustc.shortlink.project.common.constant.RedisKeyConstant.GOTO_SHORT_LINK_KEY;
-import static edu.ustc.shortlink.project.common.constant.RedisKeyConstant.LOCK_GOTO_SHORT_LINK_KEY;
+import static edu.ustc.shortlink.project.common.constant.RedisKeyConstant.*;
 import static edu.ustc.shortlink.project.common.enums.ValidDateTypeEnum.PERMANENT;
 
 /**
@@ -67,6 +75,7 @@ public class ShortLinkServiceImpl extends ServiceImpl<ShortLinkMapper, ShortLink
         shortLinkDO.setFullShortUrl(fullShortUrl);
         shortLinkDO.setShortUri(shortLinkSuffix);
         shortLinkDO.setEnableStatus(0);
+        shortLinkDO.setFavicon(this.getFavicon(requestParam.getOriginUrl()));
         try {
             baseMapper.insert(shortLinkDO);
             ShortLinkGotoDO gotoDO = ShortLinkGotoDO.builder()
@@ -78,6 +87,12 @@ public class ShortLinkServiceImpl extends ServiceImpl<ShortLinkMapper, ShortLink
             log.warn("短链接:{} 重复入库",fullShortUrl);
             throw new ServiceException("短链接生成重复");
         }
+        stringRedisTemplate.opsForValue().set(
+                String.format(GOTO_SHORT_LINK_KEY,fullShortUrl),
+                requestParam.getOriginUrl(),
+                LinkUtil.getLinkCacheValidTime(requestParam.getValidDate()),
+                TimeUnit.MILLISECONDS
+        );
         shortUriCreateCachePenetrationBloomFilter.add(fullShortUrl);
         return ShortLinkCreateRespDTO.builder()
                 .gid(requestParam.getGid())
@@ -165,7 +180,25 @@ public class ShortLinkServiceImpl extends ServiceImpl<ShortLinkMapper, ShortLink
         String key = String.format(GOTO_SHORT_LINK_KEY, fullShortUrl);
         String originalLink = stringRedisTemplate.opsForValue().get(key);
         if(StrUtil.isNotBlank(originalLink)) {
+            // 在缓存中找到原始链接，直接跳转
             response.sendRedirect(originalLink);
+            return;
+        }
+
+        // 解决缓存穿透问题
+        boolean contains = shortUriCreateCachePenetrationBloomFilter.contains(fullShortUrl);
+        if(!contains) {
+            // 布隆过滤器中不存在，不存在不会误判，直接返回
+            response.sendRedirect("/page/notfound");
+            return;
+        }
+        // 布隆过滤器中存在，但是可能误判
+
+        // 查看是否有缓存空值
+        String gotoIsNULL = stringRedisTemplate.opsForValue().get(String.format(GOTO_IS_NULL_SHORT_LINK_KEY,fullShortUrl));
+        if(StrUtil.isNotBlank(gotoIsNULL)) {
+            // 有缓存空值，直接return
+            response.sendRedirect("/page/notfound");
             return;
         }
 
@@ -182,7 +215,10 @@ public class ShortLinkServiceImpl extends ServiceImpl<ShortLinkMapper, ShortLink
                     .eq(ShortLinkGotoDO::getFullShortUrl, fullShortUrl);
             ShortLinkGotoDO linkGotoDO = shortLinkGotoMapper.selectOne(linkGotoQueryWrapper);
             if(linkGotoDO == null) {
-                // 严谨来说此处需要就行封控
+                // 缓存空值
+                stringRedisTemplate.opsForValue().set(String.format(GOTO_IS_NULL_SHORT_LINK_KEY,fullShortUrl),"-",30, TimeUnit.SECONDS);
+                // 严谨来说此处还需要进行封控
+                response.sendRedirect("/page/notfound");
                 return;
             }
             LambdaQueryWrapper<ShortLinkDO> queryWrapper = Wrappers.lambdaQuery(ShortLinkDO.class)
@@ -192,7 +228,18 @@ public class ShortLinkServiceImpl extends ServiceImpl<ShortLinkMapper, ShortLink
                     .eq(ShortLinkDO::getEnableStatus, 0);
             ShortLinkDO shortLinkDO = baseMapper.selectOne(queryWrapper);
             if(shortLinkDO != null) {
-                stringRedisTemplate.opsForValue().set(key,shortLinkDO.getOriginUrl());
+                if(shortLinkDO.getValidDate() != null && shortLinkDO.getValidDate().before(new Date())) {
+                    // 短链接过期了，缓存空值
+                    stringRedisTemplate.opsForValue().set(String.format(GOTO_IS_NULL_SHORT_LINK_KEY,fullShortUrl),"-",30, TimeUnit.SECONDS);
+                    response.sendRedirect("/page/notfound");
+                    return;
+                }
+                stringRedisTemplate.opsForValue().set(
+                        key,
+                        shortLinkDO.getOriginUrl(),
+                        LinkUtil.getLinkCacheValidTime(shortLinkDO.getValidDate()),
+                        TimeUnit.MILLISECONDS
+                );
                 response.sendRedirect(shortLinkDO.getOriginUrl());
             }
 
@@ -218,4 +265,37 @@ public class ShortLinkServiceImpl extends ServiceImpl<ShortLinkMapper, ShortLink
         }
         return shortUri;
     }
+    @SneakyThrows
+    private String getFavicon(String url) {
+        URL targetUrl = new URL(url);
+        HttpURLConnection connection = (HttpURLConnection) targetUrl.openConnection();
+        connection.setRequestMethod("GET");
+        connection.connect();
+
+        // 获取响应码
+        int responseCode = connection.getResponseCode();
+
+        // 如果是重定向响应码
+        if(responseCode == HttpURLConnection.HTTP_MOVED_PERM || responseCode == HttpURLConnection.HTTP_MOVED_TEMP) {
+            // 获取重定向的URL
+            String redirectUrl = connection.getHeaderField("location");
+            // 如果重定向的url不为空
+            if(redirectUrl != null) {
+                // 创建新的URL对象
+                URL newUrl = new URL(redirectUrl);
+                connection = (HttpURLConnection) newUrl.openConnection();
+                connection.setRequestMethod("GET");
+                connection.connect();
+                responseCode = connection.getResponseCode();
+            }
+        }
+
+        if(responseCode == HttpURLConnection.HTTP_OK) {
+            Document document = Jsoup.connect(url).get();
+            Element faviconLink = document.select("link[rel~=(?i)^(shortcut )?icon]").first();
+            return faviconLink != null ? faviconLink.attr("abs:href") : null;
+        }
+        return null;
+    }
+
 }
