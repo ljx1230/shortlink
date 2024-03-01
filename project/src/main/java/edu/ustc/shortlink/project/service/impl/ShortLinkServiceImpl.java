@@ -1,7 +1,6 @@
 package edu.ustc.shortlink.project.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
-import cn.hutool.core.date.DateUtil;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
@@ -40,7 +39,6 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.Date;
@@ -227,21 +225,20 @@ public class ShortLinkServiceImpl extends ServiceImpl<ShortLinkMapper, ShortLink
                     .eq(ShortLinkDO::getDelFlag, 0)
                     .eq(ShortLinkDO::getEnableStatus, 0);
             ShortLinkDO shortLinkDO = baseMapper.selectOne(queryWrapper);
-            if(shortLinkDO != null) {
-                if(shortLinkDO.getValidDate() != null && shortLinkDO.getValidDate().before(new Date())) {
-                    // 短链接过期了，缓存空值
+            if(shortLinkDO == null || (shortLinkDO.getValidDate() != null && shortLinkDO.getValidDate().before(new Date()))) {
+                    // 短链接过期了,或者短链接被移到回收站，缓存空值
                     stringRedisTemplate.opsForValue().set(String.format(GOTO_IS_NULL_SHORT_LINK_KEY,fullShortUrl),"-",30, TimeUnit.SECONDS);
                     response.sendRedirect("/page/notfound");
                     return;
-                }
-                stringRedisTemplate.opsForValue().set(
-                        key,
-                        shortLinkDO.getOriginUrl(),
-                        LinkUtil.getLinkCacheValidTime(shortLinkDO.getValidDate()),
-                        TimeUnit.MILLISECONDS
-                );
-                response.sendRedirect(shortLinkDO.getOriginUrl());
             }
+            // 短链接有效，重建缓存之后跳转
+            stringRedisTemplate.opsForValue().set(
+                    key,
+                    shortLinkDO.getOriginUrl(),
+                    LinkUtil.getLinkCacheValidTime(shortLinkDO.getValidDate()),
+                    TimeUnit.MILLISECONDS
+            );
+            response.sendRedirect(shortLinkDO.getOriginUrl());
 
         } finally {
             lock.unlock();
