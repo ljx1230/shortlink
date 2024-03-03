@@ -1,0 +1,52 @@
+package edu.ustc.shortlink.project.dao.entity;
+
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
+import edu.ustc.shortlink.project.common.database.BaseDO;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.util.Date;
+
+@Data
+@TableName("t_link_network_stats")
+@Builder
+@AllArgsConstructor
+@NoArgsConstructor
+public class LinkNetworkStatsDO extends BaseDO {
+
+    /**
+    * id
+    */
+    @TableId(type = IdType.AUTO)
+    private Long id;
+
+    /**
+    * 完整短链接
+    */
+    private String fullShortUrl;
+
+    /**
+    * 分组标识
+    */
+    private String gid;
+
+    /**
+    * 日期
+    */
+    private Date date;
+
+    /**
+    * 访问量
+    */
+    private Integer cnt;
+
+    /**
+    * 网络信息
+    */
+    private String network;
+
+}
